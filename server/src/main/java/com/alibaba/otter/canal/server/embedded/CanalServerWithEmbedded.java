@@ -344,13 +344,14 @@ public class CanalServerWithEmbedded extends AbstractCanalLifeCycle implements C
 
             Events<Event> events = null;
             if (positionRanges != null) { // 存在流数据
+                //通过canalInstance.getEventStore()获得binlog事件
                 events = getEvents(canalInstance.getEventStore(), positionRanges.getStart(), batchSize, timeout, unit);
-            } else {// ack后第一次获取
+            } else {// ack后第一次获取 通过canalInstance.getMetaManager()获得开始位置
                 Position start = canalInstance.getMetaManager().getCursor(clientIdentity);
                 if (start == null) { // 第一次，还没有过ack记录，则获取当前store中的第一条
                     start = canalInstance.getEventStore().getFirstPosition();
                 }
-
+                //通过canalInstance.getEventStore()获得binlog事件
                 events = getEvents(canalInstance.getEventStore(), start, batchSize, timeout, unit);
             }
 
@@ -362,7 +363,7 @@ public class CanalServerWithEmbedded extends AbstractCanalLifeCycle implements C
                 // batchSize);
                 return new Message(-1, true, new ArrayList()); // 返回空包，避免生成batchId，浪费性能
             } else {
-                // 记录到流式信息
+                // 记录到流式信息   通过canalInstance.getMetaManager()记录流式信息
                 Long batchId = canalInstance.getMetaManager().addBatch(clientIdentity, events.getPositionRange());
                 boolean raw = isRaw(canalInstance.getEventStore());
                 List entrys = null;
