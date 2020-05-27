@@ -76,21 +76,25 @@ public class AbstractCanalInstance extends AbstractCanalLifeCycle implements Can
     public void start() {
         super.start();
         if (!metaManager.isStart()) {
+            //源数据管理启动
             metaManager.start();
         }
 
         if (!alarmHandler.isStart()) {
+            //报警处理器启动
             alarmHandler.start();
         }
 
         if (!eventStore.isStart()) {
+            //数据存储器启动
             eventStore.start();
         }
 
         if (!eventSink.isStart()) {
+            //数据过滤器启动
             eventSink.start();
         }
-
+        //数据解析器启动
         if (!eventParser.isStart()) {
             beforeStartEventParser(eventParser);
             eventParser.start();

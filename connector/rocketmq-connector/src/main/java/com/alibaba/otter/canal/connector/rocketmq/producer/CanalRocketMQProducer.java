@@ -156,6 +156,7 @@ public class CanalRocketMQProducer extends AbstractMQProducer implements CanalMQ
     }
 
     public void send(final MQDestination destination, String topicName, com.alibaba.otter.canal.protocol.Message message) {
+
         if (!mqProperties.isFlatMessage()) {
             if (destination.getPartitionHash() != null && !destination.getPartitionHash().isEmpty()) {
                 // 并发构造

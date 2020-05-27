@@ -86,17 +86,18 @@ public class MemoryEventStoreWithBuffer extends AbstractCanalStoreScavenge imple
             throw new IllegalArgumentException("bufferSize must be a power of 2");
         }
 
-        indexMask = bufferSize - 1;
-        entries = new Event[bufferSize];
+        indexMask = bufferSize - 1; //初始化indexMask,用于通过位操作进行取余
+        entries = new Event[bufferSize]; //创建循环队列基于的底层数组，大小为bufferSize
     }
 
     public void stop() throws CanalStoreException {
         super.stop();
-
+        //清空所有缓存数据,将维护的相关状态变量设置为初始值
         cleanAll();
     }
 
     public void put(List<Event> data) throws InterruptedException, CanalStoreException {
+        //如果需要插入的List为空，直接返回true
         if (data == null || data.isEmpty()) {
             return;
         }
@@ -122,26 +123,36 @@ public class MemoryEventStoreWithBuffer extends AbstractCanalStoreScavenge imple
     }
 
     public boolean put(List<Event> data, long timeout, TimeUnit unit) throws InterruptedException, CanalStoreException {
+        //1.如果需要插入的List为空，直接返回true
         if (data == null || data.isEmpty()) {
             return true;
         }
 
+        //2.获得超时时间,并通过加锁进行put操作
         long nanos = unit.toNanos(timeout);
         final ReentrantLock lock = this.lock;
         lock.lockInterruptibly();
         try {
+            //这是一个死循环,进行到下面任意一个return或者抛出异常时才会停止
+            //3.检查是否满足插入条件，如果满足，进去到3，1，否则进度3，2
             for (;;) {
                 if (checkFreeSlotAt(putSequence.get() + data.size())) {
                     doPut(data);
                     return true;
                 }
+                //3.2判断是否已经超时，如果超时，则不执行插入操作，直接返回flase
                 if (nanos <= 0) {
                     return false;
                 }
 
+                //3.3 如果还没有超时，调用notFull.awaitNanos进行等待，需要其他线程调用notFull.signal()方法唤醒。
+                //唤醒是在ack操作中进行的，ack操作会删除已经消费成功的event，此时队列有了空间，因此可以唤醒，详见ack方法分析
+                //当被唤醒后，因为这是一个死循环，所以循环中的代码会重复执行。当插入条件满足时，调用doPut方法插入，然后返回
                 try {
                     nanos = notFull.awaitNanos(nanos);
+                    //3.4 如果一直等待到超时，都没有可用空间可以插入，notFull.awaitNanos会抛出InterruptedException
                 } catch (InterruptedException ie) {
+                    //3.5 超时之后，唤醒一个其他执行put操作且未被中断的线程(不明白是为了干啥)
                     notFull.signal(); // propagate to non-interrupted thread
                     throw ie;
                 }
@@ -496,13 +507,16 @@ public class MemoryEventStoreWithBuffer extends AbstractCanalStoreScavenge imple
         final ReentrantLock lock = this.lock;
         lock.lock();
         try {
+            //将Put/Get/Ack三个操作的位置都重置为初始状态-1
             putSequence.set(INIT_SEQUENCE);
             getSequence.set(INIT_SEQUENCE);
             ackSequence.set(INIT_SEQUENCE);
 
+            //将Put/Get/Ack三个操作的memSize都重置为0
             putMemSize.set(0);
             getMemSize.set(0);
             ackMemSize.set(0);
+            //讲底层Event[]数组置为null，相当于清空所有数据
             entries = null;
             // for (int i = 0; i < entries.length; i++) {
             // entries[i] = null;

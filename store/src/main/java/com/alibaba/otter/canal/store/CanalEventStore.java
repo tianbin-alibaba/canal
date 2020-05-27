@@ -45,6 +45,10 @@ public interface CanalEventStore<T> extends CanalLifeCycle, CanalStoreScavenge {
      */
     boolean tryPut(T data) throws CanalStoreException;
 
+
+
+
+
     /**
      * 获取指定大小的数据，阻塞等待其操作完成
      */
@@ -70,6 +74,11 @@ public interface CanalEventStore<T> extends CanalLifeCycle, CanalStoreScavenge {
      * 获取第一条数据的position，如果没有数据返回为null
      */
     Position getFirstPosition() throws CanalStoreException;
+
+
+
+
+
 
     /**
      * 删除{@linkplain Position}之前的数据

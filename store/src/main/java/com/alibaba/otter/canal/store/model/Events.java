@@ -19,6 +19,7 @@ public class Events<EVENT> implements Serializable {
 
     private static final long serialVersionUID = -7337454954300706044L;
 
+    //描述这组Event的开始(start)和结束位置(end)
     private PositionRange     positionRange    = new PositionRange();
     private List<EVENT>       events           = new ArrayList<EVENT>();
 
