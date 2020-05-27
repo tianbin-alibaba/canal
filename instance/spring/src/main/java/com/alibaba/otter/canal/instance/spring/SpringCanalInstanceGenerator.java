@@ -31,7 +31,7 @@ public class SpringCanalInstanceGenerator implements CanalInstanceGenerator {
                 if (!beanFactory.containsBean(beanName)) {
                     beanName = defaultName;
                 }
-
+                //以默认的bean的id值"instance"来获取CanalInstance实例
                 return (CanalInstance) beanFactory.getBean(beanName);
             } catch (Throwable e) {
                 logger.error("generator instance failed.", e);

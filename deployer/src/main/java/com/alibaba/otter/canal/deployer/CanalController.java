@@ -81,9 +81,9 @@ public class CanalController {
             }
         });
 
-        // 初始化全局参数设置
+        // 1.初始化全局参数设置
         globalInstanceConfig = initGlobalConfig(properties);
-        instanceConfigs = new MapMaker().makeMap();
+        instanceConfigs = new MapMaker().makeMap(); //这里利用Google Guava框架的MapMaker创建Map实例并赋值给instanceConfigs
         // 初始化instance config
         initInstanceConfig(properties);
 
@@ -103,7 +103,7 @@ public class CanalController {
             System.setProperty(CanalConstants.CANAL_ALIYUN_SECRETKEY, secretkey);
         }
 
-        // 准备canal server
+        // 2.准备canal server
         ip = getProperty(properties, CanalConstants.CANAL_IP);
         registerIp = getProperty(properties, CanalConstants.CANAL_REGISTER_IP);
         port = Integer.valueOf(getProperty(properties, CanalConstants.CANAL_PORT, "11111"));
@@ -124,7 +124,7 @@ public class CanalController {
             canalServer.setIp(ip);
             canalServer.setPort(port);
         }
-
+        //3、初始化zk相关代码
         // 处理下ip为空，默认使用hostIp暴露到zk中
         if (StringUtils.isEmpty(ip) && StringUtils.isEmpty(registerIp)) {
             ip = registerIp = AddressUtils.getHostIp();
@@ -154,6 +154,10 @@ public class CanalController {
                 runningMonitor.setDestination(destination);
                 runningMonitor.setListener(new ServerRunningListener() {
 
+                 /**内部调用了embededCanalServer的start(destination)方法。
+                此处需要划重点，说明每个destination对应的CanalInstance是通过embededCanalServer的start方法启动的，
+                这与我们之前分析将instanceGenerator设置到embededCanalServer中可以对应上。
+                embededCanalServer负责调用instanceGenerator生成CanalInstance实例，并负责其启动。*/
                     public void processActiveEnter() {
                         try {
                             MDC.put(CanalConstants.MDC_DESTINATION, String.valueOf(destination));
@@ -165,7 +169,7 @@ public class CanalController {
                             MDC.remove(CanalConstants.MDC_DESTINATION);
                         }
                     }
-
+                    //内部调用embededCanalServer的stop(destination)方法。与上start方法类似，只不过是停止CanalInstance。
                     public void processActiveExit() {
                         try {
                             MDC.put(CanalConstants.MDC_DESTINATION, String.valueOf(destination));
@@ -177,6 +181,10 @@ public class CanalController {
                             MDC.remove(CanalConstants.MDC_DESTINATION);
                         }
                     }
+
+                     /**处理存在zk的情况下，在Canalinstance启动之前，在zk中创建节点。
+                     路径为：/otter/canal/destinations/{0}/cluster/{1}，其0会被destination替换，1会被ip:port替换。
+                     此方法会在processActiveEnter()之前被调用*/
 
                     public void processStart() {
                         try {
@@ -205,6 +213,8 @@ public class CanalController {
                         }
                     }
 
+                  //处理存在zk的情况下，在Canalinstance停止前，释放zk节点，路径为/otter/canal/destinations/{0}/cluster/{1}，
+                  //其0会被destination替换，1会被ip:port替换。此方法会在processActiveExit()之前被调用
                     public void processStop() {
                         try {
                             MDC.put(CanalConstants.MDC_DESTINATION, String.valueOf(destination));
@@ -345,19 +355,21 @@ public class CanalController {
     private InstanceConfig initGlobalConfig(Properties properties) {
         String adminManagerAddress = getProperty(properties, CanalConstants.CANAL_ADMIN_MANAGER);
         InstanceConfig globalConfig = new InstanceConfig();
+        //读取canal.instance.global.mode
         String modeStr = getProperty(properties, CanalConstants.getInstanceModeKey(CanalConstants.GLOBAL_NAME));
         if (StringUtils.isNotEmpty(adminManagerAddress)) {
             // 如果指定了manager地址,则强制适用manager
+            //将modelStr转成枚举InstanceMode，这是一个枚举类，只有2个取值，SPRING\MANAGER，对应两种配置方式
             globalConfig.setMode(InstanceMode.MANAGER);
         } else if (StringUtils.isNotEmpty(modeStr)) {
             globalConfig.setMode(InstanceMode.valueOf(StringUtils.upperCase(modeStr)));
         }
-
+        //读取canal.instance.global.lazy
         String lazyStr = getProperty(properties, CanalConstants.getInstancLazyKey(CanalConstants.GLOBAL_NAME));
         if (StringUtils.isNotEmpty(lazyStr)) {
             globalConfig.setLazy(Boolean.valueOf(lazyStr));
         }
-
+        //读取canal.instance.global.manager.address
         String managerAddress = getProperty(properties,
             CanalConstants.getInstanceManagerAddressKey(CanalConstants.GLOBAL_NAME));
         if (StringUtils.isNotEmpty(managerAddress)) {
@@ -367,26 +379,27 @@ public class CanalController {
 
             globalConfig.setManagerAddress(managerAddress);
         }
-
+        //读取canal.instance.global.spring.xml
         String springXml = getProperty(properties, CanalConstants.getInstancSpringXmlKey(CanalConstants.GLOBAL_NAME));
         if (StringUtils.isNotEmpty(springXml)) {
             globalConfig.setSpringXml(springXml);
         }
 
         instanceGenerator = new CanalInstanceGenerator() {
-
+            //1、根据destination从instanceConfigs获取对应的InstanceConfig对象
             public CanalInstance generate(String destination) {
                 InstanceConfig config = instanceConfigs.get(destination);
                 if (config == null) {
                     throw new CanalServerException("can't find destination:" + destination);
                 }
-
+                //2、如果destination对应的InstanceConfig的mode是manager方式，使用ManagerCanalInstanceGenerator
                 if (config.getMode().isManager()) {
                     PlainCanalInstanceGenerator instanceGenerator = new PlainCanalInstanceGenerator(properties);
                     instanceGenerator.setCanalConfigClient(managerClients.get(config.getManagerAddress()));
                     instanceGenerator.setSpringXml(config.getSpringXml());
                     return instanceGenerator.generate(destination);
                 } else if (config.getMode().isSpring()) {
+                    //3、如果destination对应的InstanceConfig的mode是spring方式，使用SpringCanalInstanceGenerator
                     SpringCanalInstanceGenerator instanceGenerator = new SpringCanalInstanceGenerator();
                     instanceGenerator.setSpringXml(config.getSpringXml());
                     return instanceGenerator.generate(destination);
@@ -406,11 +419,15 @@ public class CanalController {
     }
 
     private void initInstanceConfig(Properties properties) {
+        //读取配置项canal.destinations
         String destinationStr = getProperty(properties, CanalConstants.CANAL_DESTINATIONS);
+        //以","分割canal.destinations，得到一个数组形式的destination
         String[] destinations = StringUtils.split(destinationStr, CanalConstants.CANAL_DESTINATION_SPLIT);
 
         for (String destination : destinations) {
+            //为每一个destination生成一个InstanceConfig实例
             InstanceConfig config = parseInstanceConfig(properties, destination);
+            //将destination对应的InstanceConfig放入instanceConfigs中
             InstanceConfig oldConfig = instanceConfigs.put(destination, config);
 
             if (oldConfig != null) {
@@ -421,6 +438,7 @@ public class CanalController {
 
     private InstanceConfig parseInstanceConfig(Properties properties, String destination) {
         String adminManagerAddress = getProperty(properties, CanalConstants.CANAL_ADMIN_MANAGER);
+        //每个destination对应的InstanceConfig都引用了全局的globalInstanceConfig
         InstanceConfig config = new InstanceConfig(globalInstanceConfig);
         String modeStr = getProperty(properties, CanalConstants.getInstanceModeKey(destination));
         if (StringUtils.isNotEmpty(adminManagerAddress)) {
@@ -449,7 +467,7 @@ public class CanalController {
                 config.setSpringXml(springXml);
             }
         }
-
+       //...其他几个配置项与获取globalInstanceConfig类似，不再赘述，唯一注意的的是配置项的key部分中的global变成传递进来的destination
         return config;
     }
 

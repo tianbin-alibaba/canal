@@ -44,6 +44,7 @@ public class AbstractCanalInstance extends AbstractCanalLifeCycle implements Can
 
     @Override
     public boolean subscribeChange(ClientIdentity identity) {
+        //如果设置了filter
         if (StringUtils.isNotEmpty(identity.getFilter())) {
             logger.info("subscribe filter change to " + identity.getFilter());
             AviaterRegexFilter aviaterFilter = new AviaterRegexFilter(identity.getFilter());
@@ -96,9 +97,9 @@ public class AbstractCanalInstance extends AbstractCanalLifeCycle implements Can
         }
         //数据解析器启动
         if (!eventParser.isStart()) {
-            beforeStartEventParser(eventParser);
+            beforeStartEventParser(eventParser);//启动前执行一些操作
             eventParser.start();
-            afterStartEventParser(eventParser);
+            afterStartEventParser(eventParser);//启动后执行一些操作
         }
         logger.info("start successful....");
     }
@@ -134,8 +135,9 @@ public class AbstractCanalInstance extends AbstractCanalLifeCycle implements Can
     }
 
     protected void beforeStartEventParser(CanalEventParser eventParser) {
-
+       //1、判断eventParser的类型是否是GroupEventParser
         boolean isGroup = (eventParser instanceof GroupEventParser);
+        //2、如果是GroupEventParser，则循环启动其内部包含的每一个CanalEventParser，依次调用startEventParserInternal方法
         if (isGroup) {
             // 处理group的模式
             List<CanalEventParser> eventParsers = ((GroupEventParser) eventParser).getEventParsers();
@@ -143,6 +145,7 @@ public class AbstractCanalInstance extends AbstractCanalLifeCycle implements Can
                 startEventParserInternal(singleEventParser, true);
             }
         } else {
+            //如果不是，说明是一个普通的CanalEventParser，直接调用startEventParserInternal方法
             startEventParserInternal(eventParser, false);
         }
     }
@@ -179,6 +182,7 @@ public class AbstractCanalInstance extends AbstractCanalLifeCycle implements Can
      * 初始化单个eventParser，不需要考虑group
      */
     protected void startEventParserInternal(CanalEventParser eventParser, boolean isGroup) {
+        // 1 、启动CanalLogPositionManager
         if (eventParser instanceof AbstractEventParser) {
             AbstractEventParser abstractEventParser = (AbstractEventParser) eventParser;
             // 首先启动log position管理器
@@ -187,7 +191,7 @@ public class AbstractCanalInstance extends AbstractCanalLifeCycle implements Can
                 logPositionManager.start();
             }
         }
-
+        // 2 、启动CanalHAController
         if (eventParser instanceof MysqlEventParser) {
             MysqlEventParser mysqlEventParser = (MysqlEventParser) eventParser;
             CanalHAController haController = mysqlEventParser.getHaController();

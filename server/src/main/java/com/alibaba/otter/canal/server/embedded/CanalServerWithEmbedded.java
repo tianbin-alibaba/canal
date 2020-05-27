@@ -385,7 +385,6 @@ public class CanalServerWithEmbedded extends AbstractCanalLifeCycle implements C
                         }
                     });
                 } else {
-                    //将Events转为Entry
                     entrys = Lists.transform(events.getEvents(), new Function<Event, CanalEntry.Entry>() {
 
                         public CanalEntry.Entry apply(Event input) {
@@ -401,7 +400,6 @@ public class CanalServerWithEmbedded extends AbstractCanalLifeCycle implements C
                         batchId,
                         events.getPositionRange());
                 }
-                //构造Message返回
                 return new Message(batchId, raw, entrys);
             }
 

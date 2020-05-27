@@ -37,6 +37,7 @@ public class CanalLauncher {
             setGlobalUncaughtExceptionHandler();
 
             logger.info("## load canal configurations");
+            //1、读取canal.properties文件中配置，默认读取classpath下的canal.properties
             String conf = System.getProperty("canal.conf", "classpath:canal.properties");
             Properties properties = new Properties();
             if (conf.startsWith(CLASSPATH_URL_PREFIX)) {
